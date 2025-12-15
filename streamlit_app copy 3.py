@@ -5,24 +5,27 @@ import io
 import function
 import xlsxwriter
 
+st.set_page_config(layout="wide")
+
 # ================= SIDEBAR =================
 with st.sidebar:
     st.title("Procedures and Notes")
-    st.write("1. Upload WhatsApp export (.txt / .zip)")
-    st.write("2. Choose date range")
+    st.subheader("App usage procedures:")
+    st.write("1. Upload WhatsApp export (.txt / .zip) from Android")
+    st.write("2. Pick date range, language, time format")
     st.write("3. Choose extraction mode")
 
 # ================= MAIN =================
 st.title("The Un-RECORDER App by Gz.")
-st.warning("Only works with WhatsApp Android export")
+st.warning("Works ONLY with WhatsApp Android export")
 
 dataRaw = st.file_uploader(
     "Choose File .txt/.zip Export WA",
-    type=["txt", "zip"]
+    type=['txt', 'zip']
 )
 
-oldDate = st.date_input("Stock Opname Start Date")
-newDate = st.date_input("Stock Opname End Date")
+oldDate = st.date_input("Start Date (YYYY/MM/DD)")
+newDate = st.date_input("End Date (YYYY/MM/DD)")
 
 waLanguage = st.radio(
     "WhatsApp Language:",
@@ -40,9 +43,9 @@ extractMode = st.radio(
 )
 
 # ================= PROCESS =================
-# ================= PROCESS =================
 if dataRaw and st.button("Olah Data!", type="primary"):
     try:
+        # --- Load master location ---
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         location_path = os.path.join(BASE_DIR, "Data Master Location.xlsx")
 
@@ -52,56 +55,36 @@ if dataRaw and st.button("Olah Data!", type="primary"):
 
         dataLocation = function.readLocationData(location_path)
 
-        # 1️⃣ Read raw WA
-        dataRaw1 = function.decideType(dataRaw)
-
-        # 2️⃣ Get date patterns
-        datePattern, dateTimeSenderPattern, dateStructure = (
+        # --- Parse WhatsApp data ---
+        raw = function.decideType(dataRaw)
+        datePattern, dateTimeSenderPattern, dateStructure = \
             function.datePatternAndroid(phoneTimeFormat, waLanguage)
-        )
 
-        # 3️⃣ Read & split messages
-        processedData = function.readRawData(
-            dataRaw1,
-            datePattern
-        )
+        processed = function.readRawData(raw, datePattern)
 
-        # 4️⃣ PROCESS (INI YANG BENAR)
-        cleanData = function.dataProcessing(
-            processedData,
-            dateTimeSenderPattern,
+        allData, unrecordData = function.dataProcessing(
+            processed,
             oldDate,
             newDate,
-            dateStructure,
-            phoneTimeFormat,
             dataLocation
         )
-# ================= FLAG UNRECORD =================
-        cleanData["IS_UNRECORD"] = cleanData["MESSAGE RAW"].str.contains(
-    "UNRECORD",
-    case=False,
-    na=False
-)
 
-        # ================= MODE =================
-        if extractMode == "Unrecord Only":
-            exportData = cleanData[cleanData["IS_UNRECORD"]].copy()
-        else:
-            exportData = cleanData.copy()
+        exportData = unrecordData if extractMode == "Unrecord Only" else allData
 
-        # ================= EXPORT =================
+        # --- Excel export ---
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            exportData.to_excel(
-                writer,
-                sheet_name="Exported Data",
-                index=False
-            )
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            exportData.to_excel(writer, sheet_name="Exported Data", index=False)
+
+            if extractMode == "All Messages":
+                unrecordData.to_excel(
+                    writer, sheet_name="Unrecord Only", index=False
+                )
 
         output.seek(0)
         st.session_state["output"] = output
 
-        st.success("Data processed successfully")
+        st.success("Processing completed successfully!")
 
     except Exception as e:
         st.error(f"ERROR: {e}")
