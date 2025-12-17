@@ -5,7 +5,7 @@ import io
 
 st.set_page_config(page_title="Excel Filter", layout="centered")
 
-st.title("📊 Excel XNXX")
+st.title("📊 Excel Filter")
 
 # ================= FILE UPLOAD =================
 uploaded_file = st.file_uploader(
@@ -37,10 +37,8 @@ if uploaded_file:
     )
 
     # ================= CLEAN BLANK VALUES =================
-    # Buang NaN, string kosong, dan spasi
     df_clean = df[
-        df[selected_column]
-        .notna() &
+        df[selected_column].notna() &
         (df[selected_column].astype(str).str.strip() != "")
     ]
 
@@ -74,13 +72,33 @@ if uploaded_file:
         st.dataframe(filtered_df, use_container_width=True)
 
         # ================= DOWNLOAD =================
+        export_df = filtered_df.copy()
+
+        # 🔥 FINAL DROP: A, B, D, G, H, I, J, K, L, O, P
+        drop_indexes = [0, 1, 3, 6, 7, 8, 9, 10, 11, 14, 15]
+        drop_indexes = [i for i in drop_indexes if i < len(export_df.columns)]
+        export_df = export_df.drop(export_df.columns[drop_indexes], axis=1)
+
+        # Rename 3 kolom pertama
+        new_headers = export_df.columns.tolist()
+        if len(new_headers) >= 1:
+            new_headers[0] = "P/N"
+        if len(new_headers) >= 2:
+            new_headers[1] = "S/N"
+        if len(new_headers) >= 3:
+            new_headers[2] = "P/N Description"
+        if len(new_headers) >= 4:
+            new_headers[3] = "Batch"
+        export_df.columns = new_headers
+
+        # Export Excel
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            filtered_df.to_excel(writer, index=False)
+            export_df.to_excel(writer, index=False)
         output.seek(0)
 
         st.download_button(
-            label="⬇️ Download hasil (Exclude + No Blanks)",
+            label="⬇️ Download hasil (Kolom dibersihkan)",
             data=output,
             file_name="filtered_exclude_no_blanks.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
